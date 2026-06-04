@@ -17,11 +17,9 @@ export default async function HomePage() {
       {/* Header */}
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary text-primary-foreground">
-              <Database className="h-5 w-5" />
-            </div>
-            <span className="font-bold text-xl">DeepMap Census</span>
+          <div className="flex items-center gap-3">
+            <img src="/logo-civix.png" alt="CIVIX Logo" className="h-9 w-auto object-contain" />
+            <span className="font-extrabold text-xl tracking-tight">CIVIX</span>
           </div>
           <div className="flex items-center gap-4">
             <Button asChild variant="ghost">
@@ -81,7 +79,7 @@ export default async function HomePage() {
       {/* Footer */}
       <footer className="border-t">
         <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
-          <p>DeepMap Census - Sistema de Gestión Censal</p>
+          <p>CIVIX - Sistema de Gestión Censal</p>
         </div>
       </footer>
     </div>

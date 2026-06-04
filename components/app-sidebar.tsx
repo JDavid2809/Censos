@@ -122,12 +122,12 @@ export function AppSidebar({ profile }: AppSidebarProps) {
       {/* ── Logo / Brand ── */}
       <SidebarHeader className="px-4 py-4 border-b border-sidebar-border/60">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-primary/70 text-primary-foreground shadow-sm group-hover:shadow-md transition-shadow">
-            <Database className="h-4.5 w-4.5" />
+          <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 text-primary shadow-sm group-hover:shadow-md transition-shadow overflow-hidden">
+            <img src="/logo-civix.png" alt="CIVIX Logo" className="h-7 w-auto object-contain" />
             <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-sidebar" />
           </div>
           <div>
-            <span className="font-bold text-base tracking-tight leading-none">DeepMap</span>
+            <span className="font-extrabold text-base tracking-tight leading-none text-foreground">CIVIX</span>
             <p className="text-[10px] text-sidebar-foreground/50 mt-0.5 leading-none">Sistema de Censos</p>
           </div>
         </Link>

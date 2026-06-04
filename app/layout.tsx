@@ -8,7 +8,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'DeepMap Census - Sistema de Gestión Censal',
+  title: 'CIVIX - Sistema de Gestión Censal',
   description: 'Sistema completo de gestión censal con campos dinámicos, importación de datos y reportes',
   generator: 'v0.app',
   icons: {

@@ -44,11 +44,9 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-primary text-primary-foreground">
-              <Database className="h-6 w-6" />
-            </div>
+            <img src="/logo-civix.png" alt="CIVIX Logo" className="h-12 w-auto object-contain" />
           </div>
-          <CardTitle className="text-2xl font-bold">DeepMap Census</CardTitle>
+          <CardTitle className="text-2xl font-bold">CIVIX</CardTitle>
           <CardDescription>
             Ingresa tus credenciales para acceder al sistema
           </CardDescription>
