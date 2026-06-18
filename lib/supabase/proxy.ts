@@ -8,8 +8,14 @@ export async function updateSession(request: NextRequest) {
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
+  let url = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  // Sanitize trailing /rest/v1/ or slashes
+  if (url.endsWith('/rest/v1/')) url = url.slice(0, -'/rest/v1/'.length)
+  if (url.endsWith('/rest/v1')) url = url.slice(0, -'/rest/v1'.length)
+  url = url.replace(/\/+$/, '')
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    url,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
@@ -31,24 +37,35 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // Do not run code between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
-  // issues with users being randomly logged out.
-
-  // IMPORTANT: If you remove getUser() and you use server-side rendering
-  // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Wrap in try/catch: a network failure to Supabase must not crash the
+  // middleware (and every page with it). If the check fails we allow the
+  // request through; sessions are re-validated on the next successful call.
+  let user = null
+  try {
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser()
+    user = u
+  } catch {
+    // Network error — Supabase unreachable. Let the request continue.
+    // /dashboard is still protected below as a safe fallback (cookie check).
+  }
 
   if (
     // Protect /dashboard routes — redirect unauthenticated users to login
     request.nextUrl.pathname.startsWith('/dashboard') &&
     !user
   ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
+    // Only redirect if there are no auth cookies at all (avoids redirect loop
+    // on transient network errors when the user IS logged in).
+    const hasAuthCookie = request.cookies.getAll().some(
+      (c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token')
+    )
+    if (!hasAuthCookie) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      return NextResponse.redirect(url)
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

@@ -70,7 +70,19 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
       return
     }
 
-    const { data: { user } } = await supabase.auth.getUser()
+    let userId = null
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      userId = user?.id
+    } catch (e) {
+      console.warn("Error getting user with getUser:", e)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        userId = session?.user?.id
+      } catch (sessionErr) {
+        console.error("Failed to get session fallback:", sessionErr)
+      }
+    }
 
     // Create registro
     const { data: registro, error: registroError } = await supabase
@@ -78,7 +90,7 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
       .insert({
         censo_id: censoId,
         status: "completo",
-        created_by: user?.id,
+        created_by: userId,
       })
       .select()
       .single()

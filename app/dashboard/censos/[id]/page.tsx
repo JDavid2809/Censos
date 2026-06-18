@@ -1,9 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit, Settings, Plus, Upload, Download, CheckCircle2, PauseCircle, XCircle } from "lucide-react"
 import type { Censo, CampoCenso } from "@/lib/types"
 import { CensoDetailClient } from "@/components/censo-detail-client"
 

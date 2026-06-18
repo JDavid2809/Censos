@@ -58,6 +58,7 @@ interface TemplateField {
   label: string
   field_type: string
   required: boolean
+  options?: { options: string[] } | null
 }
 
 interface DbTemplate {
@@ -203,17 +204,29 @@ export default function PlantillasPage() {
     setFormError(null)
 
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setFormError("Tu sesión ha expirado")
+      setSubmitting(false)
+      return
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("organization_id")
+      .eq("id", user.id)
+      .single()
 
     const payload = {
       name: formName.trim(),
       description: formDesc.trim() || null,
       category: formCategory || null,
       is_public: formIsPublic,
+      organization_id: profile?.organization_id || null,
       campos: validFields.map(f => ({
         ...f,
         name: f.name || toSlug(f.label),
       })),
-      created_by: user?.id || null,
+      created_by: user.id,
     }
 
     try {
@@ -283,6 +296,7 @@ export default function PlantillasPage() {
         name: campo.name || toSlug(campo.label),
         label: campo.label,
         field_type: campo.field_type,
+        options: campo.options || null,
         required: campo.required || false,
         order_index: idx,
       }))
@@ -574,42 +588,60 @@ export default function PlantillasPage() {
 
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {formFields.map((field, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2.5 border rounded-lg bg-muted/30">
-                    <div className="flex-1 min-w-0">
-                      <Input
-                        placeholder="Nombre del campo (ej: Nombre completo)"
-                        value={field.label}
-                        onChange={e => {
-                          updateField(idx, "label", e.target.value)
-                          updateField(idx, "name", toSlug(e.target.value))
-                        }}
-                        disabled={submitting}
-                        className="h-8 text-sm mb-1"
-                      />
-                      <p className="text-xs text-muted-foreground font-mono pl-1">
-                        id: {field.name || toSlug(field.label) || "…"}
-                      </p>
+                  <div key={idx} className="flex flex-col gap-2 p-2.5 border rounded-lg bg-muted/30">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 min-w-0">
+                        <Input
+                          placeholder="Nombre del campo (ej: Nombre completo)"
+                          value={field.label}
+                          onChange={e => {
+                            updateField(idx, "label", e.target.value)
+                            updateField(idx, "name", toSlug(e.target.value))
+                          }}
+                          disabled={submitting}
+                          className="h-8 text-sm mb-1"
+                        />
+                        <p className="text-xs text-muted-foreground font-mono pl-1">
+                          id: {field.name || toSlug(field.label) || "…"}
+                        </p>
+                      </div>
+                      <Select value={field.field_type} onValueChange={v => updateField(idx, "field_type", v)} disabled={submitting}>
+                        <SelectTrigger className="w-36 h-8 text-xs flex-shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FIELD_TYPES.map(ft => (
+                            <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeField(idx)}
+                        disabled={submitting || formFields.length === 1}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                    <Select value={field.field_type} onValueChange={v => updateField(idx, "field_type", v)} disabled={submitting}>
-                      <SelectTrigger className="w-36 h-8 text-xs flex-shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FIELD_TYPES.map(ft => (
-                          <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeField(idx)}
-                      disabled={submitting || formFields.length === 1}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+
+                    {["seleccion_unica", "seleccion_multiple"].includes(field.field_type) && (
+                      <div className="pt-1">
+                        <Textarea
+                          placeholder={"Opciones (una por línea)\nOpcion 1\nOpcion 2"}
+                          value={field.options?.options?.join("\n") || ""}
+                          onChange={e => {
+                            const optionsList = e.target.value.split("\n").filter(Boolean).map(s => s.trim());
+                            updateField(idx, "options", { options: optionsList } as any)
+                          }}
+                          disabled={submitting}
+                          rows={2}
+                          className="text-xs h-16"
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

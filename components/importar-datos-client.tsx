@@ -352,9 +352,22 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
     setProgress(0)
     setError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
+    let userId = null
     try {
-      const res = await executeImport(supabase, censoId, user?.id, data, campos, mapping, setProgress)
+      const { data: { user } } = await supabase.auth.getUser()
+      userId = user?.id
+    } catch (e) {
+      console.warn("Error getting user with getUser in import:", e)
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        userId = session?.user?.id
+      } catch (sessionErr) {
+        console.error("Failed to get session fallback in import:", sessionErr)
+      }
+    }
+
+    try {
+      const res = await executeImport(supabase, censoId, userId, data, campos, mapping, setProgress)
       setResult(res)
       if (res.success > 0) router.refresh()
     } catch (err: any) {

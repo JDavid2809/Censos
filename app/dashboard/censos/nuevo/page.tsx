@@ -431,6 +431,7 @@ export default function NuevoCensoPage() {
           name: f.name || toSlug(f.label),
           label: f.label,
           field_type: f.field_type,
+          options: (f as any).options || null,
           required: false,
           order_index: idx,
         }))
@@ -895,62 +896,73 @@ export default function NuevoCensoPage() {
               </div>
 
               {detectedFields.map((field, idx) => (
-                <div
-                  key={idx}
-                  className={`grid grid-cols-[24px_1fr_160px_32px] items-center gap-3 p-3 rounded-lg border transition-colors ${field.included ? "bg-card" : "bg-muted/30 opacity-60"}`}
-                >
-                  {/* Toggle checkbox */}
-                  <Checkbox
-                    checked={field.included}
-                    onCheckedChange={() => toggleField(idx)}
-                    aria-label="Incluir campo"
-                  />
-
-                  {/* Label editor */}
-                  <div className="min-w-0">
-                    <Input
-                      value={field.label}
-                      onChange={e => {
-                        updateField(idx, "label", e.target.value)
-                        if (!field.name || field.name === toSlug(field.label)) {
-                          updateField(idx, "name", toSlug(e.target.value))
-                        }
-                      }}
-                      className="h-8 text-sm"
-                      placeholder="Nombre del campo"
-                      disabled={!field.included}
+                <div key={idx} className={`flex flex-col gap-2 p-3 rounded-lg border transition-colors ${field.included ? "bg-card" : "bg-muted/30 opacity-60"}`}>
+                  <div className="grid grid-cols-[24px_1fr_160px_32px] items-center gap-3">
+                    <Checkbox
+                      checked={field.included}
+                      onCheckedChange={() => toggleField(idx)}
+                      aria-label="Incluir campo"
                     />
-                    {field.sample_values.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
-                        Ej: {field.sample_values.join(" · ")}
-                      </p>
-                    )}
+
+                    <div className="min-w-0">
+                      <Input
+                        value={field.label}
+                        onChange={e => {
+                          updateField(idx, "label", e.target.value)
+                          if (!field.name || field.name === toSlug(field.label)) {
+                            updateField(idx, "name", toSlug(e.target.value))
+                          }
+                        }}
+                        className="h-8 text-sm"
+                        placeholder="Nombre del campo"
+                        disabled={!field.included}
+                      />
+                      {field.sample_values && field.sample_values.length > 0 && (
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                          Ej: {field.sample_values.join(" · ")}
+                        </p>
+                      )}
+                    </div>
+
+                    <Select
+                      value={field.field_type}
+                      onValueChange={v => updateField(idx, "field_type", v)}
+                      disabled={!field.included}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FIELD_TYPES.map(ft => (
+                          <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeField(idx)}
+                      title="Eliminar campo"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
 
-                  {/* Type selector */}
-                  <Select
-                    value={field.field_type}
-                    onValueChange={v => updateField(idx, "field_type", v)}
-                    disabled={!field.included}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FIELD_TYPES.map(ft => (
-                        <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {/* Delete */}
-                  <Button
-                    variant="ghost" size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => removeField(idx)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {["seleccion_unica", "seleccion_multiple"].includes(field.field_type) && field.included && (
+                    <div className="ml-10">
+                      <textarea
+                        placeholder={"Opciones (una por línea)\nOpción 1\nOpción 2"}
+                        value={(field as any).options?.options?.join("\n") || ""}
+                        onChange={e => {
+                          const optionsList = e.target.value.split("\n").filter(Boolean).map(s => s.trim());
+                          updateField(idx, "options" as any, { options: optionsList } as any)
+                        }}
+                        disabled={!field.included}
+                        className="w-full h-16 px-3 py-2 border rounded-md bg-background text-xs"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -79,8 +79,10 @@ function DynamicField({
   const options = (campo.options as { options?: string[] })?.options || []
 
   const handleMulti = (opt: string, checked: boolean) => {
-    const current = (value as string[]) || []
-    onChange(checked ? [...current, opt] : current.filter((v) => v !== opt))
+    const current = Array.isArray(value)
+      ? value
+      : (typeof value === "string" ? value.split(",").map((s) => s.trim()).filter(Boolean) : [])
+    onChange(checked ? [...current, opt] : current.filter((v: string) => v !== opt))
   }
 
   switch (campo.field_type as FieldType) {
@@ -136,15 +138,18 @@ function DynamicField({
           </SelectContent>
         </Select>
       )
-    case "seleccion_multiple":
+    case "seleccion_multiple": {
+      const currentArr = Array.isArray(value)
+        ? value
+        : (typeof value === "string" ? value.split(",").map((s) => s.trim()).filter(Boolean) : [])
       return (
         <div className="space-y-2">
           {options.map((opt) => (
             <div key={opt} className="flex items-center gap-2">
               <Checkbox
                 id={`${campo.id}-${opt}`}
-                checked={((value as string[]) || []).includes(opt)}
-                onCheckedChange={(c) => handleMulti(opt, !!c)}
+                checked={currentArr.includes(opt.trim())}
+                onCheckedChange={(c) => handleMulti(opt.trim(), !!c)}
                 disabled={disabled}
               />
               <Label htmlFor={`${campo.id}-${opt}`} className="text-sm font-normal">{opt}</Label>
@@ -152,6 +157,7 @@ function DynamicField({
           ))}
         </div>
       )
+    }
     default:
       return <Input value={(value as string) || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} />
   }
@@ -254,16 +260,16 @@ export function RegistrosTable({ censoId, campos }: RegistrosTableProps) {
       prev.map((r) =>
         r.id === editingRegistro.id
           ? {
-              ...r,
-              status: newStatus,
-              valores_registro: valoresData.map((v) => ({
-                id: "",
-                registro_id: v.registro_id,
-                campo_id: v.campo_id,
-                value: v.value,
-                created_at: new Date().toISOString(),
-              })),
-            }
+            ...r,
+            status: newStatus,
+            valores_registro: valoresData.map((v) => ({
+              id: "",
+              registro_id: v.registro_id,
+              campo_id: v.campo_id,
+              value: v.value,
+              created_at: new Date().toISOString(),
+            })),
+          }
           : r
       )
     )
@@ -352,58 +358,58 @@ export function RegistrosTable({ censoId, campos }: RegistrosTableProps) {
               const valoresMap = new Map(registro.valores_registro.map((v) => [v.campo_id, v.value]))
               return (
                 <TableRow key={registro.id}>
-                <TableCell className="font-mono text-xs">
-                  {registro.id.slice(0, 8)}…
-                </TableCell>
-                {displayCampos.map((campo) => (
-                  <TableCell key={campo.id} className="max-w-[150px] truncate">
-                    {valoresMap.get(campo.id) || "-"}
+                  <TableCell className="font-mono text-xs">
+                    {registro.id.slice(0, 8)}…
                   </TableCell>
-                ))}
-                <TableCell>
-                  <StatusBadge status={registro.status} />
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(registro.created_at).toLocaleDateString("es-ES")}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Acciones</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setViewingRegistro(registro)}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        Ver detalle
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => openEdit(registro)}>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive"
-                        onClick={() => setDeleteId(registro.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            )
-          })
-        )}
+                  {displayCampos.map((campo) => (
+                    <TableCell key={campo.id} className="max-w-[150px] truncate">
+                      {valoresMap.get(campo.id) || "-"}
+                    </TableCell>
+                  ))}
+                  <TableCell>
+                    <StatusBadge status={registro.status} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(registro.created_at).toLocaleDateString("es-ES")}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Acciones</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setViewingRegistro(registro)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Ver detalle
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEdit(registro)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleteId(registro.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              )
+            })
+          )}
         </TableBody>
       </Table>
 
       {/* View Dialog */}
       <Dialog open={!!viewingRegistro} onOpenChange={(open) => !open && setViewingRegistro(null)}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalle del registro</DialogTitle>
             <DialogDescription>
@@ -426,7 +432,7 @@ export function RegistrosTable({ censoId, campos }: RegistrosTableProps) {
 
       {/* Edit Dialog */}
       <Dialog open={!!editingRegistro} onOpenChange={(open) => !open && setEditingRegistro(null)}>
-        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar registro</DialogTitle>
             <DialogDescription>Modifica los datos del registro</DialogDescription>

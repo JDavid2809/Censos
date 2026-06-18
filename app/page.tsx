@@ -2,11 +2,17 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Database, ArrowRight, BarChart3, Shield, Upload, FileSpreadsheet } from "lucide-react"
+import { ArrowRight, BarChart3, Shield, Upload, FileSpreadsheet } from "lucide-react"
 
 export default async function HomePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const supabase = await createClient()
+    const { data: { user: u } } = await supabase.auth.getUser()
+    user = u
+  } catch {
+    // Network error reaching Supabase — render landing page without redirecting
+  }
 
   if (user) {
     redirect("/dashboard")

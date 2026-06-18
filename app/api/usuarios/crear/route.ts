@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    console.log("API /usuarios/crear - BODY:", body)
     const { email, password, first_name, last_name, role } = body
 
     if (!email || !password || !first_name) {
@@ -35,8 +36,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Use Supabase Admin client to create user without needing email confirmation
+    let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+    if (supabaseUrl.endsWith('/rest/v1/')) supabaseUrl = supabaseUrl.slice(0, -'/rest/v1/'.length)
+    if (supabaseUrl.endsWith('/rest/v1')) supabaseUrl = supabaseUrl.slice(0, -'/rest/v1'.length)
+    supabaseUrl = supabaseUrl.replace(/\/+$/, '')
+
     const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseUrl,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
@@ -48,11 +54,14 @@ export async function POST(request: NextRequest) {
       user_metadata: {
         first_name,
         last_name: last_name || "",
+        role,
+        organization_id: callerProfile.organization_id,
       },
     })
 
     if (createError) {
-      return NextResponse.json({ error: createError.message }, { status: 400 })
+      console.error("API /usuarios/crear - SUPABASE CREATE ERROR:", createError)
+      return NextResponse.json({ error: createError.message, details: createError }, { status: 400 })
     }
 
     if (!newUser.user) {
@@ -71,9 +80,10 @@ export async function POST(request: NextRequest) {
       })
 
     if (profileError) {
+      console.error("API /usuarios/crear - PROFILE UPSERT ERROR:", profileError)
       // Rollback user creation if profile fails
       await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
-      return NextResponse.json({ error: profileError.message }, { status: 500 })
+      return NextResponse.json({ error: profileError.message, details: profileError }, { status: 500 })
     }
 
     // Log audit

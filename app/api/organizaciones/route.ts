@@ -50,8 +50,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { action, name, description, organizationId } = body
 
+    let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
+    if (supabaseUrl.endsWith('/rest/v1/')) supabaseUrl = supabaseUrl.slice(0, -'/rest/v1/'.length)
+    if (supabaseUrl.endsWith('/rest/v1')) supabaseUrl = supabaseUrl.slice(0, -'/rest/v1'.length)
+    supabaseUrl = supabaseUrl.replace(/\/+$/, '')
+
     const supabaseAdmin = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      supabaseUrl,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } }
     )

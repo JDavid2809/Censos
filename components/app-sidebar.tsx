@@ -149,20 +149,28 @@ export function AppSidebar({ profile }: AppSidebarProps) {
                 return (
                   <SidebarMenuItem key={item.title}>
                     {item.subItems ? (
-                      <Collapsible defaultOpen={pathname.startsWith(item.url)}>
-                        <CollapsibleTrigger asChild>
-                          <SidebarMenuButton
-                            className={`group/btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
-                              isActive
-                                ? "bg-primary/10 text-primary"
-                                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                            }`}
-                          >
-                            <item.icon className={`h-4 w-4 flex-shrink-0 ${isActive ? "text-primary" : ""}`} />
-                            <span className="flex-1">{item.title}</span>
-                            <ChevronRight className="h-3.5 w-3.5 text-sidebar-foreground/40 transition-transform duration-200 group-data-[state=open]/btn:rotate-90" />
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
+                      <Collapsible defaultOpen={pathname.startsWith(item.url)} className="w-full">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          className={`group/btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+                            isActive
+                              ? "bg-primary/10 text-primary"
+                              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <Link href={item.url} className="flex items-center gap-2.5 flex-1 text-left">
+                              <item.icon className={`h-4 w-4 flex-shrink-0 ${isActive ? "text-primary" : ""}`} />
+                              <span className="flex-1">{item.title}</span>
+                            </Link>
+                            <CollapsibleTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <button className="h-6 w-6 p-0 hover:bg-sidebar-accent/80 rounded flex items-center justify-center transition-colors">
+                                <ChevronRight className="h-3.5 w-3.5 text-sidebar-foreground/40 transition-transform duration-200 group-data-[state=open]/btn:rotate-90" />
+                              </button>
+                            </CollapsibleTrigger>
+                          </div>
+                        </SidebarMenuButton>
                         <CollapsibleContent>
                           <SidebarMenuSub className="ml-3 mt-0.5 space-y-0.5 border-l border-sidebar-border/60 pl-3">
                             {item.subItems.map((sub) => {
