@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { sileo } from "sileo"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -40,8 +41,13 @@ export function EditarCensoClient({ censo }: EditarCensoClientProps) {
   const [description, setDescription] = useState(censo.description || "")
   const [category, setCategory] = useState(censo.category || "")
   const [status, setStatus] = useState<CensoStatus>(censo.status)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setErrorState] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+
+  function setError(msg: string | null) {
+    setErrorState(msg)
+    if (msg) sileo.error({ title: "Error", description: msg })
+  }
   const router = useRouter()
   const supabase = createClient()
 

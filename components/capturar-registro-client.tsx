@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { sileo } from "sileo"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -18,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+
 import { ArrowLeft, Loader2, Save } from "lucide-react"
 import type { CampoCenso, FieldType } from "@/lib/types"
 
@@ -31,8 +32,6 @@ interface CapturarRegistroClientProps {
 export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarRegistroClientProps) {
   const [values, setValues] = useState<Record<string, string | string[]>>({})
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -52,8 +51,6 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
-    setError(null)
-    setSuccess(false)
 
     // Validate required fields
     const missingRequired = campos
@@ -65,7 +62,7 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
       })
 
     if (missingRequired.length > 0) {
-      setError(`Campos requeridos: ${missingRequired.map(c => c.label).join(", ")}`)
+      sileo.error({ title: "Campos requeridos", description: `Faltan campos por llenar: ${missingRequired.map(c => c.label).join(", ")}` })
       setLoading(false)
       return
     }
@@ -96,7 +93,7 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
       .single()
 
     if (registroError) {
-      setError(registroError.message)
+      sileo.error({ title: "Error al crear", description: registroError.message })
       setLoading(false)
       return
     }
@@ -116,14 +113,14 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
         .insert(valoresData)
 
       if (valoresError) {
-        setError(valoresError.message)
+        sileo.error({ title: "Error al guardar valores", description: valoresError.message })
         setLoading(false)
         return
       }
     }
 
     setLoading(false)
-    setSuccess(true)
+    sileo.success({ title: "Éxito", description: "Registro guardado exitosamente." })
     setValues({})
     // Scroll to top to show success message
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -158,63 +155,41 @@ export function CapturarRegistroClient({ censoId, censoName, campos }: CapturarR
         </Card>
       ) : (
         <>
-          {success && (
-            <Alert>
-              <AlertDescription className="flex items-center justify-between gap-4">
-                <span>✅ Registro guardado exitosamente.</span>
-                <div className="flex gap-2 shrink-0">
-                  <Button size="sm" variant="outline" asChild>
-                    <Link href={`/dashboard/censos/${censoId}`}>Ver registros</Link>
-                  </Button>
-                  <Button size="sm" onClick={() => setSuccess(false)}>
-                    Agregar otro
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {!success && (
             <form onSubmit={handleSubmit}>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Datos del registro</CardTitle>
+              <Card className="shadow-lg border-primary/10">
+                <CardHeader className="bg-muted/30 border-b pb-6">
+                  <CardTitle className="text-xl text-primary">Datos del registro</CardTitle>
                   <CardDescription>
-                    Complete los campos del formulario
+                    Complete los campos del formulario. Los campos marcados con asterisco (*) son obligatorios.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  {error && (
-                    <Alert variant="destructive">
-                      <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                  )}
+                <CardContent className="space-y-8 pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
+                    {campos.map((campo) => (
+                      <DynamicField
+                        key={campo.id}
+                        campo={campo}
+                        value={values[campo.id]}
+                        onChange={(v) => handleChange(campo.id, v)}
+                        onMultiChange={(o, c) => handleMultiSelectChange(campo.id, o, c)}
+                        disabled={loading}
+                      />
+                    ))}
+                  </div>
 
-                  {campos.map((campo) => (
-                    <DynamicField
-                      key={campo.id}
-                      campo={campo}
-                      value={values[campo.id]}
-                      onChange={(v) => handleChange(campo.id, v)}
-                      onMultiChange={(o, c) => handleMultiSelectChange(campo.id, o, c)}
-                      disabled={loading}
-                    />
-                  ))}
-
-                  <div className="flex gap-4 pt-4">
-                    <Button type="submit" disabled={loading}>
+                  <div className="flex gap-4 pt-4 border-t mt-8">
+                    <Button type="submit" disabled={loading} className="w-full sm:w-auto font-medium">
                       {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       <Save className="mr-2 h-4 w-4" />
                       Guardar registro
                     </Button>
-                    <Button type="button" variant="outline" asChild>
+                    <Button type="button" variant="outline" asChild className="w-full sm:w-auto">
                       <Link href={`/dashboard/censos/${censoId}`}>Cancelar</Link>
                     </Button>
                   </div>
                 </CardContent>
               </Card>
             </form>
-          )}
         </>
       )}
     </div>
@@ -356,15 +331,17 @@ function DynamicField({ campo, value, onChange, onMultiChange, disabled }: Dynam
     }
   }
 
+  const isWide = campo.field_type === "textarea" || campo.field_type === "direccion" || campo.field_type === "seleccion_multiple"
+
   return (
-    <div className="space-y-2">
-      <Label htmlFor={campo.id}>
+    <div className={`space-y-3 ${isWide ? "md:col-span-2 lg:col-span-3" : ""}`}>
+      <Label htmlFor={campo.id} className="text-sm font-semibold text-foreground/90">
         {campo.label}
         {campo.required && <span className="text-destructive ml-1">*</span>}
       </Label>
       {renderField()}
       {campo.default_value && !value && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground/80 font-medium">
           Valor por defecto: {campo.default_value}
         </p>
       )}

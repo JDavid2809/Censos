@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
+import { sileo } from "sileo"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import * as XLSX from "xlsx"
@@ -12,7 +12,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react"
 import type { CampoCenso, Registro, ValorRegistro } from "@/lib/types"
 
@@ -26,7 +25,6 @@ export function ExportarDatosClient({ censoId, censoName, campos }: ExportarDato
   const [format, setFormat] = useState<"xlsx" | "csv" | "pdf">("xlsx")
   const [selectedCampos, setSelectedCampos] = useState<string[]>(campos.map(c => c.id))
   const [exporting, setExporting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
 
   function toggleCampo(campoId: string) {
@@ -47,24 +45,23 @@ export function ExportarDatosClient({ censoId, censoName, campos }: ExportarDato
 
   async function handleExport() {
     if (selectedCampos.length === 0) {
-      setError("Selecciona al menos un campo para exportar")
+      sileo.error({ title: "Falta selección", description: "Por favor, selecciona al menos un campo de la lista de campos disponibles para poder exportar los datos del censo." })
       return
     }
 
     setExporting(true)
-    setError(null)
 
     try {
       // Fetch registros with valores
       const { data: registros, error: fetchError } = await supabase
-        .from("registros")
-        .select("*, valores_registro(*)")
-        .eq("censo_id", censoId)
+         .from("registros")
+         .select("*, valores_registro(*)")
+         .eq("censo_id", censoId)
 
       if (fetchError) throw fetchError
 
       if (!registros || registros.length === 0) {
-        setError("No hay registros para exportar")
+        sileo.error({ title: "Sin datos", description: "No se encontraron registros de datos guardados en este censo para exportar. Asegúrate de capturar o importar información primero." })
         setExporting(false)
         return
       }
@@ -115,9 +112,13 @@ export function ExportarDatosClient({ censoId, censoName, campos }: ExportarDato
         doc.save(`${censoName.replace(/[^a-zA-Z0-9]/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`)
       }
 
+      sileo.success({
+        title: "Exportación exitosa",
+        description: `Se han exportado y descargado exitosamente ${registros.length} registros en formato ${format.toUpperCase()}.`
+      })
       setExporting(false)
     } catch (err) {
-      setError("Error al exportar los datos")
+      sileo.error({ title: "Error al exportar", description: "Ocurrió un error inesperado al procesar y generar el archivo de exportación. Por favor, verifica tu conexión y vuelve a intentarlo." })
       setExporting(false)
     }
   }
@@ -229,12 +230,6 @@ export function ExportarDatosClient({ censoId, censoName, campos }: ExportarDato
       {/* Export Button */}
       <Card>
         <CardContent className="pt-6">
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {selectedCampos.length} de {campos.length} campos seleccionados

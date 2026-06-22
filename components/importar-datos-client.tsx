@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { sileo } from "sileo"
 import * as XLSX from "xlsx"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,19 +16,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   ArrowLeft,
   Upload,
   FileSpreadsheet,
   Loader2,
-  CheckCircle2,
-  AlertCircle,
   Database,
   FileCode2,
-  FileJson,
   Info,
   Table2,
 } from "lucide-react"
@@ -240,8 +238,6 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ success: number; errors: number } | null>(null)
 
   // Excel/CSV tab state
   const [excelFile, setExcelFile] = useState<File | null>(null)
@@ -280,20 +276,25 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
     const f = e.target.files?.[0]
     if (!f) return
     setExcelFile(f)
-    setError(null)
-    setResult(null)
     try {
       const data = await f.arrayBuffer()
       const workbook = XLSX.read(data)
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
       const jsonData = XLSX.utils.sheet_to_json<SheetRow>(firstSheet, { defval: "" })
-      if (jsonData.length === 0) { setError("El archivo no contiene datos"); return }
+      if (jsonData.length === 0) {
+        sileo.error({ title: "Archivo vacío", description: "El archivo Excel/CSV seleccionado no contiene registros o está vacío. Por favor, asegúrate de que el archivo tenga al menos una fila de datos además de los encabezados." })
+        return
+      }
       const cols = Object.keys(jsonData[0])
       setExcelColumns(cols)
       setExcelData(jsonData)
       setMapping(autoMap(cols))
+      sileo.success({
+        title: "Archivo cargado",
+        description: `Se detectaron ${cols.length} columnas y ${jsonData.length} registros listos para mapear.`
+      })
     } catch {
-      setError("Error al leer el archivo Excel/CSV.")
+      sileo.error({ title: "Error de lectura", description: "Error al leer el archivo Excel/CSV. Por favor, verifica que el archivo no esté corrupto, que el formato sea .xlsx, .xls o .csv válido y que no esté abierto en otro programa." })
     }
   }, [campos])
 
@@ -302,16 +303,18 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
     const f = e.target.files?.[0]
     if (!f) return
     setXmlFile(f)
-    setError(null)
-    setResult(null)
     try {
       const text = await f.text()
       const { rows, columns } = parseXmlData(text)
       setXmlData(rows)
       setXmlColumns(columns)
       setMapping(autoMap(columns))
+      sileo.success({
+        title: "Archivo XML cargado",
+        description: `Se procesó el XML correctamente, encontrando ${columns.length} campos y ${rows.length} elementos para importar.`
+      })
     } catch (err: any) {
-      setError(err.message || "Error al leer el archivo XML.")
+      sileo.error({ title: "XML inválido", description: err.message || "Error al leer el archivo XML. Asegúrate de que el archivo tenga una estructura XML válida y contenga elementos repetitivos estructurados para los registros." })
     }
   }, [campos])
 
@@ -322,13 +325,11 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
     setSqlFile(f)
     setSelectedTable("")
     setMapping({})
-    setError(null)
-    setResult(null)
     try {
       const text = await f.text()
       const { tables } = parseSqlSchema(text)
       if (Object.keys(tables).length === 0) {
-        setError("No se encontraron tablas en el archivo SQL. Asegúrate de que contenga sentencias CREATE TABLE.")
+        sileo.error({ title: "Sin tablas", description: "No se encontraron tablas en el archivo SQL. Asegúrate de que contenga sentencias CREATE TABLE válidas y compatibles con PostgreSQL." })
         return
       }
       setSqlTables(tables)
@@ -336,8 +337,12 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
       const first = Object.keys(tables)[0]
       setSelectedTable(first)
       setMapping(autoMap(tables[first]))
+      sileo.success({
+        title: "Esquema SQL cargado",
+        description: `Se detectaron ${Object.keys(tables).length} tablas en el archivo SQL. Se seleccionó la tabla '${first}' por defecto.`
+      })
     } catch (err: any) {
-      setError(err.message || "Error al leer el archivo SQL.")
+      sileo.error({ title: "Error SQL", description: err.message || "Error al procesar el archivo SQL. Asegúrate de que el archivo contenga scripts de creación de tablas estructurados correctamente." })
     }
   }, [campos])
 
@@ -347,12 +352,14 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
   }
 
   async function handleImport(data: SheetRow[]) {
-    if (data.length === 0) { setError("No hay datos para importar"); return }
+    if (data.length === 0) {
+      sileo.error({ title: "Sin registros", description: "No hay registros disponibles para importar. Por favor, selecciona y carga un archivo de datos primero." })
+      return
+    }
     setImporting(true)
     setProgress(0)
-    setError(null)
 
-    let userId = null
+    let userId: string | undefined = undefined
     try {
       const { data: { user } } = await supabase.auth.getUser()
       userId = user?.id
@@ -360,7 +367,7 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
       console.warn("Error getting user with getUser in import:", e)
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        userId = session?.user?.id
+        userId = session?.user?.id ?? undefined
       } catch (sessionErr) {
         console.error("Failed to get session fallback in import:", sessionErr)
       }
@@ -368,11 +375,20 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
 
     try {
       const res = await executeImport(supabase, censoId, userId, data, campos, mapping, setProgress)
-      setResult(res)
-      if (res.success > 0) router.refresh()
+      if (res.success > 0) {
+        router.refresh()
+        sileo.success({
+          title: "Importación exitosa",
+          description: `Se han importado exitosamente ${res.success} registros al censo. Los cambios ya están reflejados en el sistema.`
+        })
+      } else {
+        sileo.error({
+          title: "Error en la importación",
+          description: "No se pudo insertar ningún registro en la base de datos. Verifica la estructura de tus datos y vuelve a intentarlo."
+        })
+      }
     } catch (err: any) {
-      setError(err.message || "Error durante la importación")
-      setResult({ success: 0, errors: data.length })
+      sileo.error({ title: "Error de importación", description: err.message || "Error durante el proceso de importación. Por favor, comprueba que todos los campos obligatorios del censo estén mapeados correctamente y que los tipos de datos coincidan." })
     } finally {
       setImporting(false)
       setProgress(100)
@@ -418,7 +434,7 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setError(null); setResult(null); setMapping({}) }}>
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setMapping({}) }}>
         <TabsList className="grid grid-cols-3 w-full max-w-lg">
           <TabsTrigger value="excel" className="gap-2">
             <FileSpreadsheet className="h-4 w-4" />
@@ -478,8 +494,6 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
               onImport={() => handleImport(excelData)}
               importing={importing}
               progress={progress}
-              error={error}
-              result={result}
               censoId={censoId}
             />
           )}
@@ -539,16 +553,11 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
                 onImport={() => handleImport(xmlData)}
                 importing={importing}
                 progress={progress}
-                error={error}
-                result={result}
                 censoId={censoId}
               />
             </>
           )}
 
-          {error && xmlColumns.length === 0 && (
-            <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-          )}
         </TabsContent>
 
         {/* ─── PostgreSQL SQL ─── */}
@@ -653,9 +662,6 @@ export function ImportarDatosClient({ censoId, censoName, campos }: ImportarDato
             </Alert>
           )}
 
-          {error && (
-            <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -668,16 +674,12 @@ function ImportActions({
   onImport,
   importing,
   progress,
-  error,
-  result,
   censoId,
 }: {
   data: SheetRow[]
   onImport: () => void
   importing: boolean
   progress: number
-  error: string | null
-  result: { success: number; errors: number } | null
   censoId: string
 }) {
   return (
@@ -687,24 +689,6 @@ function ImportActions({
         <CardDescription>Revisa el mapeo y comienza la importación de datos</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {result && (
-          <Alert variant={result.errors > 0 ? "destructive" : "default"}>
-            <div className="flex items-center gap-2">
-              {result.errors > 0 ? <AlertCircle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-              <AlertDescription>
-                Importación completada: <strong>{result.success}</strong> registros exitosos
-                {result.errors > 0 && `, ${result.errors} errores`}
-              </AlertDescription>
-            </div>
-          </Alert>
-        )}
 
         {importing && (
           <div className="space-y-2">

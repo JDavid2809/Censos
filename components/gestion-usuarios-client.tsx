@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { sileo } from "sileo"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -74,8 +75,17 @@ export function GestionUsuariosClient({ initialProfiles, currentUserId }: Gestio
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [error, setErrorState] = useState<string | null>(null)
+  const [successMsg, setSuccessMsgState] = useState<string | null>(null)
+
+  function setError(msg: string | null) {
+    setErrorState(msg)
+    if (msg) sileo.error({ title: "Error", description: msg })
+  }
+  function setSuccessMsg(msg: string | null) {
+    setSuccessMsgState(msg)
+    if (msg) sileo.success({ title: "Éxito", description: msg })
+  }
 
   // Form state
   const [firstName, setFirstName] = useState("")
@@ -175,7 +185,6 @@ export function GestionUsuariosClient({ initialProfiles, currentUserId }: Gestio
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="first_name">Nombre *</Label>
@@ -257,6 +266,7 @@ export function GestionUsuariosClient({ initialProfiles, currentUserId }: Gestio
           <AlertDescription>{successMsg}</AlertDescription>
         </Alert>
       )}
+
 
       {/* Role summary cards */}
       <div className="grid gap-4 md:grid-cols-4">

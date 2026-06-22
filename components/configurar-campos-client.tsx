@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { sileo } from "sileo"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -150,7 +151,12 @@ export function ConfigurarCamposClient({ censoId, censoName, initialCampos }: Co
   const [editingCampo, setEditingCampo] = useState<CampoCenso | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setErrorState] = useState<string | null>(null)
+
+  function setError(msg: string | null) {
+    setErrorState(msg)
+    if (msg) sileo.error({ title: "Error", description: msg })
+  }
   const router = useRouter()
   const supabase = createClient()
 
