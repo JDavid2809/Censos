@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,8 +23,16 @@ import {
   AlertCircle,
   BarChart3,
   PieChart as PieIcon,
-  Activity
+  Activity,
+  Loader2
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { Censo, CampoCenso } from "@/lib/types"
 import { RegistrosTable } from "@/components/registros-table"
 import {
@@ -63,7 +72,47 @@ export function CensoDetailClient({
   distributions,
 }: CensoDetailClientProps) {
   const router = useRouter()
+  const supabase = createClient()
   const statusCfg = STATUS_CONFIG[censo.status] || STATUS_CONFIG.finalizado
+
+  const [selectedCampoId, setSelectedCampoId] = useState<string>(campos.length > 0 ? campos[0].id : "")
+  const [dynamicChartData, setDynamicChartData] = useState<{name: string, value: number}[]>([])
+  const [loadingChart, setLoadingChart] = useState(false)
+
+  useEffect(() => {
+    if (!selectedCampoId) return
+    let isMounted = true
+
+    async function loadData() {
+      setLoadingChart(true)
+      const { data } = await supabase
+        .from('valores_registro')
+        .select('value')
+        .eq('campo_id', selectedCampoId)
+
+      if (!isMounted) return
+
+      if (data) {
+        const dist: Record<string, number> = {}
+        data.forEach(row => {
+          let val = row.value || "Sin especificar"
+          dist[val] = (dist[val] || 0) + 1
+        })
+        const distData = Object.entries(dist)
+          .map(([name, value]) => ({ name, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 12)
+
+        setDynamicChartData(distData)
+      } else {
+        setDynamicChartData([])
+      }
+      setLoadingChart(false)
+    }
+
+    loadData()
+    return () => { isMounted = false }
+  }, [selectedCampoId, supabase])
 
   // KPI Calculations
   const completos = statusCounts.completo || 0
@@ -261,69 +310,49 @@ export function CensoDetailClient({
           </CardContent>
         </Card>
 
-        {/* Field types or specific value distribution chart */}
+        {/* Dynamic Field analysis chart */}
         <Card className="flex flex-col">
           <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-primary" />
-              {selectCampos.length > 0 ? "Distribución de Datos Clave" : "Estructura del Censo"}
-            </CardTitle>
-            <CardDescription>
-              {selectCampos.length > 0
-                ? `Valores capturados en campos de opción única`
-                : "Campos configurados por tipo de datos"}
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  Análisis por Campo
+                </CardTitle>
+                <CardDescription>
+                  Distribución de valores del campo seleccionado
+                </CardDescription>
+              </div>
+              <Select value={selectedCampoId} onValueChange={setSelectedCampoId}>
+                <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue placeholder="Seleccione un campo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {campos.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className="flex-1 min-h-[250px] flex items-center justify-center">
-            {selectCampos.length > 0 ? (
-              <div className="w-full space-y-6">
-                {selectCampos.map((campo) => {
-                  const dist = distributions[campo.id] || {}
-                  const distData = Object.entries(dist).map(([key, val]) => ({
-                    name: key,
-                    value: val,
-                  }))
-
-                  if (distData.length === 0) {
-                    return (
-                      <div key={campo.id} className="text-sm text-muted-foreground py-2 border-b">
-                        <span className="font-medium text-foreground">{campo.label}:</span> Sin datos suficientes.
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <div key={campo.id} className="space-y-1">
-                      <p className="text-xs font-semibold text-muted-foreground">{campo.label}</p>
-                      <div className="h-[60px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={distData} layout="vertical">
-                            <XAxis type="number" hide />
-                            <YAxis dataKey="name" type="category" width={90} fontSize={10} axisLine={false} tickLine={false} />
-                            <Tooltip formatter={(value) => [`${value} respuestas`, "Total"]} />
-                            <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                              {distData.map((_, i) => (
-                                <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )
-                })}
+            {loadingChart ? (
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30" />
+            ) : dynamicChartData.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground flex flex-col items-center justify-center">
+                <Activity className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                <p className="text-xs">Sin datos suficientes para este campo</p>
               </div>
             ) : (
-              // Fallback: Field structure chart
               <div className="w-full h-[220px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={fieldTypeData}>
-                    <XAxis dataKey="name" fontSize={10} tickLine={false} />
-                    <YAxis allowDecimals={false} fontSize={10} tickLine={false} />
-                    <Tooltip formatter={(value) => [`${value} campos`, "Cantidad"]} />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]}>
-                      {fieldTypeData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <BarChart data={dynamicChartData}>
+                    <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} />
+                    <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
+                    <Tooltip formatter={(value) => [`${value} registros`, "Total"]} />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {dynamicChartData.map((_, i) => (
+                        <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
                       ))}
                     </Bar>
                   </BarChart>
