@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
-import type { Censo, CampoCenso } from "@/lib/types"
+import type { Censo, CampoCenso, UserRole } from "@/lib/types"
 import { CensoDetailClient } from "@/components/censo-detail-client"
 
 interface Props {
@@ -14,6 +14,18 @@ export default async function CensoDetailPage({ params }: Props) {
   if (!uuidRegex.test(id)) notFound()
 
   const supabase = await createClient()
+
+  // Current user role
+  const { data: { user } } = await supabase.auth.getUser()
+  let userRole: UserRole = "consulta"
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+    if (profile?.role) userRole = profile.role as UserRole
+  }
 
   const { data: censo, error } = await supabase
     .from("censos")
@@ -47,6 +59,36 @@ export default async function CensoDetailPage({ params }: Props) {
     return acc
   }, {})
 
+  // Actividad de capturistas: registros agrupados por created_by
+  const { data: registrosPorUsuario } = await supabase
+    .from("registros")
+    .select("created_by")
+    .eq("censo_id", id)
+    .not("created_by", "is", null)
+
+  // Count per user
+  const countPerUser: Record<string, number> = {}
+  for (const r of registrosPorUsuario || []) {
+    if (r.created_by) countPerUser[r.created_by] = (countPerUser[r.created_by] || 0) + 1
+  }
+
+  // Fetch names for those user IDs
+  const userIds = Object.keys(countPerUser)
+  let capturistasActivity: { name: string; count: number }[] = []
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, first_name, last_name, role")
+      .in("id", userIds)
+
+    capturistasActivity = (profiles || [])
+      .map(p => ({
+        name: [p.first_name, p.last_name].filter(Boolean).join(" ") || "Usuario sin nombre",
+        count: countPerUser[p.id] || 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+  }
+
   // For seleccion_unica/booleano fields: get value distribution (top 3 campos)
   const selectCampos = (campos || []).filter(c =>
     ["seleccion_unica", "booleano", "seleccion_multiple"].includes(c.field_type)
@@ -77,6 +119,8 @@ export default async function CensoDetailPage({ params }: Props) {
       statusCounts={statusCounts}
       selectCampos={(selectCampos as CampoCenso[]) || []}
       distributions={distributions}
+      userRole={userRole}
+      capturistasActivity={capturistasActivity}
     />
   )
 }

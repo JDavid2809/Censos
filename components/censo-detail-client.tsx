@@ -18,13 +18,11 @@ import {
   PauseCircle,
   XCircle,
   FileSpreadsheet,
-  Layers,
-  Calendar,
-  AlertCircle,
   BarChart3,
   PieChart as PieIcon,
   Activity,
-  Loader2
+  Loader2,
+  Users,
 } from "lucide-react"
 import {
   Select,
@@ -33,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import type { Censo, CampoCenso } from "@/lib/types"
+import type { Censo, CampoCenso, UserRole } from "@/lib/types"
 import { RegistrosTable } from "@/components/registros-table"
 import {
   ResponsiveContainer,
@@ -45,7 +43,6 @@ import {
   Cell,
   PieChart,
   Pie,
-  Legend
 } from "recharts"
 
 interface CensoDetailClientProps {
@@ -55,28 +52,38 @@ interface CensoDetailClientProps {
   statusCounts: Record<string, number>
   selectCampos: CampoCenso[]
   distributions: Record<string, Record<string, number>>
+  userRole: UserRole
+  capturistasActivity: { name: string; count: number }[]
 }
 
 const STATUS_CONFIG = {
-  activo: { label: "Activo", variant: "default" as const, bg: "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20" },
-  pausado: { label: "Pausado", variant: "secondary" as const, bg: "bg-amber-500/10 text-amber-500 hover:bg-amber-500/20" },
-  finalizado: { label: "Finalizado", variant: "outline" as const, bg: "bg-muted text-muted-foreground" },
+  activo: { label: "Activo", bg: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" },
+  pausado: { label: "Pausado", bg: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" },
+  finalizado: { label: "Finalizado", bg: "bg-muted text-muted-foreground border-border" },
 }
+
+// Quick action definition
+const quickActions = (id: string) => [
+  { label: "Capturar", href: `/dashboard/censos/${id}/capturar`, icon: Plus, color: "text-blue-500", bg: "bg-blue-500/10 hover:bg-blue-500/20", roles: ["administrador","capturista","analista","consulta"] },
+  { label: "Importar", href: `/dashboard/censos/${id}/importar`, icon: Upload, color: "text-emerald-600", bg: "bg-emerald-500/10 hover:bg-emerald-500/20", roles: ["administrador","analista"] },
+  { label: "Exportar", href: `/dashboard/censos/${id}/exportar`, icon: Download, color: "text-violet-600", bg: "bg-violet-500/10 hover:bg-violet-500/20", roles: ["administrador","analista"] },
+  { label: "Campos", href: `/dashboard/censos/${id}/configurar`, icon: Settings, color: "text-amber-600", bg: "bg-amber-500/10 hover:bg-amber-500/20", roles: ["administrador"] },
+]
 
 export function CensoDetailClient({
   censo,
   campos,
   registrosCount,
   statusCounts,
-  selectCampos,
-  distributions,
+  userRole,
+  capturistasActivity,
 }: CensoDetailClientProps) {
   const router = useRouter()
   const supabase = createClient()
   const statusCfg = STATUS_CONFIG[censo.status] || STATUS_CONFIG.finalizado
 
   const [selectedCampoId, setSelectedCampoId] = useState<string>(campos.length > 0 ? campos[0].id : "")
-  const [dynamicChartData, setDynamicChartData] = useState<{name: string, value: number}[]>([])
+  const [dynamicChartData, setDynamicChartData] = useState<{ name: string; value: number }[]>([])
   const [loadingChart, setLoadingChart] = useState(false)
 
   useEffect(() => {
@@ -86,24 +93,24 @@ export function CensoDetailClient({
     async function loadData() {
       setLoadingChart(true)
       const { data } = await supabase
-        .from('valores_registro')
-        .select('value')
-        .eq('campo_id', selectedCampoId)
+        .from("valores_registro")
+        .select("value")
+        .eq("campo_id", selectedCampoId)
 
       if (!isMounted) return
 
       if (data) {
         const dist: Record<string, number> = {}
         data.forEach(row => {
-          let val = row.value || "Sin especificar"
+          const val = row.value || "Sin especificar"
           dist[val] = (dist[val] || 0) + 1
         })
-        const distData = Object.entries(dist)
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 12)
-
-        setDynamicChartData(distData)
+        setDynamicChartData(
+          Object.entries(dist)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 12)
+        )
       } else {
         setDynamicChartData([])
       }
@@ -114,177 +121,139 @@ export function CensoDetailClient({
     return () => { isMounted = false }
   }, [selectedCampoId, supabase])
 
-  // KPI Calculations
   const completos = statusCounts.completo || 0
   const incompletos = statusCounts.incompleto || 0
   const errores = statusCounts.error || 0
+  const completoPct = registrosCount > 0 ? Math.round((completos / registrosCount) * 100) : 0
 
-  // 1. Status Chart Data
   const statusChartData = [
     { name: "Completo", value: completos, color: "#10b981" },
     { name: "Incompleto", value: incompletos, color: "#f59e0b" },
     { name: "Error", value: errores, color: "#ef4444" },
   ].filter(d => d.value > 0)
 
-  // 2. Field Type Composition (for fallback/extra details)
-  const fieldTypeCounts = campos.reduce<Record<string, number>>((acc, c) => {
-    acc[c.field_type] = (acc[c.field_type] || 0) + 1
-    return acc
-  }, {})
-  const fieldTypeData = Object.entries(fieldTypeCounts).map(([type, count]) => ({
-    name: type.replace("_", " ").toUpperCase(),
-    value: count,
-  }))
-
   const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#14b8a6", "#f97316"]
 
+  const visibleActions = quickActions(censo.id).filter(a => a.roles.includes(userRole))
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 md:px-6 py-6">
-      {/* ── Top Navigation Bar ── */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg"
-              onClick={() => router.push("/dashboard/censos")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded">
-              {censo.category || "General"}
-            </span>
-            <Badge className={`${statusCfg.bg} border-none font-medium text-xs`}>
-              {statusCfg.label}
-            </Badge>
+    <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-6">
+
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 mt-0.5 shrink-0"
+            onClick={() => router.push("/dashboard/censos")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-0.5 rounded-md border">
+                {censo.category || "General"}
+              </span>
+              <Badge className={`${statusCfg.bg} border font-medium text-xs px-2 py-0.5`}>
+                {statusCfg.label}
+              </Badge>
+            </div>
+            <h1 className="text-xl font-bold tracking-tight leading-tight">{censo.name}</h1>
+            {censo.description && (
+              <p className="text-sm text-muted-foreground max-w-xl">{censo.description}</p>
+            )}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight mt-1">{censo.name}</h1>
-          {censo.description && (
-            <p className="text-sm text-muted-foreground max-w-2xl">{censo.description}</p>
-          )}
         </div>
 
-        {/* Header Actions */}
-        <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/dashboard/censos/${censo.id}/editar`}>
-              <Edit className="mr-2 h-4 w-4" />
-              Editar censo
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/dashboard/censos/${censo.id}/configurar`}>
-              <Settings className="mr-2 h-4 w-4" />
-              Campos
-            </Link>
-          </Button>
+        {/* Header edit button — only for non-capturistas */}
+        {userRole !== "capturista" && (
+          <div className="flex items-center gap-2 shrink-0 pl-11 sm:pl-0">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/censos/${censo.id}/editar`}>
+                <Edit className="mr-1.5 h-3.5 w-3.5" />
+                Editar
+              </Link>
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* ── KPI row + Quick Actions side by side ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        {/* KPI cards — 2x2 grid inside, takes 2 cols */}
+        <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Total registros", value: registrosCount.toLocaleString(), color: "text-foreground", icon: FileSpreadsheet, iconBg: "bg-blue-500/10 text-blue-500" },
+            { label: "Completos", value: completos.toLocaleString(), color: "text-emerald-600 dark:text-emerald-400", icon: CheckCircle2, iconBg: "bg-emerald-500/10 text-emerald-500" },
+            { label: "Incompletos", value: incompletos.toLocaleString(), color: "text-amber-600 dark:text-amber-400", icon: PauseCircle, iconBg: "bg-amber-500/10 text-amber-500" },
+            { label: "Con errores", value: errores.toLocaleString(), color: "text-red-600 dark:text-red-400", icon: XCircle, iconBg: "bg-red-500/10 text-red-500" },
+          ].map(kpi => {
+            const Icon = kpi.icon
+            return (
+              <Card key={kpi.label} className="hover:shadow-sm transition-shadow">
+                <CardContent className="p-4 flex flex-col gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${kpi.iconBg}`}>
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className={`text-xl font-bold leading-none ${kpi.color}`}>{kpi.value}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{kpi.label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
-      </div>
 
-      {/* ── Key Statistics Widget ── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Registros Totales</p>
-              <p className="text-2xl font-bold">{registrosCount.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center">
-              <FileSpreadsheet className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Completos</p>
-              <p className="text-2xl font-bold text-emerald-500">{completos.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Incompletos</p>
-              <p className="text-2xl font-bold text-amber-500">{incompletos.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-              <PauseCircle className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-6 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Con Errores</p>
-              <p className="text-2xl font-bold text-red-500">{errores.toLocaleString()}</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center">
-              <XCircle className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── Quick Actions Hub ── */}
-      <Card className="bg-gradient-to-r from-primary/5 via-transparent to-transparent">
-        <CardHeader className="py-4">
-          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Acciones Rápidas</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 grid-cols-2 md:grid-cols-4 pt-0">
-          <Button asChild className="h-20 flex flex-col items-center justify-center gap-1.5" variant="outline">
-            <Link href={`/dashboard/censos/${censo.id}/capturar`}>
-              <Plus className="h-5 w-5 text-blue-500" />
-              <span className="text-xs font-semibold">Capturar registro</span>
-            </Link>
-          </Button>
-          <Button asChild className="h-20 flex flex-col items-center justify-center gap-1.5" variant="outline">
-            <Link href={`/dashboard/censos/${censo.id}/importar`}>
-              <Upload className="h-5 w-5 text-emerald-500" />
-              <span className="text-xs font-semibold">Importar datos</span>
-            </Link>
-          </Button>
-          <Button asChild className="h-20 flex flex-col items-center justify-center gap-1.5" variant="outline">
-            <Link href={`/dashboard/censos/${censo.id}/exportar`}>
-              <Download className="h-5 w-5 text-purple-500" />
-              <span className="text-xs font-semibold">Exportar datos</span>
-            </Link>
-          </Button>
-          <Button asChild className="h-20 flex flex-col items-center justify-center gap-1.5" variant="outline">
-            <Link href={`/dashboard/censos/${censo.id}/configurar`}>
-              <Settings className="h-5 w-5 text-amber-500" />
-              <span className="text-xs font-semibold">Configurar campos</span>
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* ── Charts & Visualizations ── */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Status distribution chart */}
+        {/* Quick Actions — vertical list, takes 1 col */}
         <Card className="flex flex-col">
-          <CardHeader>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <PieIcon className="h-4 w-4 text-primary" />
-              Estado de los Registros
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Acciones rápidas
             </CardTitle>
-            <CardDescription>Proporción de completitud de datos cargados</CardDescription>
           </CardHeader>
-          <CardContent className="flex-1 min-h-[250px] flex items-center justify-center">
+          <CardContent className="px-4 pb-4 flex flex-col gap-2 flex-1 justify-start">
+            {visibleActions.map(action => {
+              const Icon = action.icon
+              return (
+                <Button
+                  key={action.label}
+                  asChild
+                  variant="ghost"
+                  className={`w-full justify-start h-9 px-3 gap-2.5 font-medium text-sm ${action.bg}`}
+                >
+                  <Link href={action.href}>
+                    <Icon className={`h-4 w-4 shrink-0 ${action.color}`} />
+                    {action.label}
+                  </Link>
+                </Button>
+              )
+            })}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Charts row ── */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Status Pie */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <PieIcon className="h-4 w-4 text-primary" />
+              Estado de registros
+            </CardTitle>
+            <CardDescription className="text-xs">Proporción de completitud</CardDescription>
+          </CardHeader>
+          <CardContent className="min-h-[200px] flex items-center justify-center">
             {statusChartData.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground flex flex-col items-center justify-center">
-                <Activity className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                <p className="text-xs">No hay registros capturados todavía</p>
+              <div className="text-center text-muted-foreground flex flex-col items-center gap-2">
+                <Activity className="h-7 w-7 text-muted-foreground/30" />
+                <p className="text-xs">Sin registros aún</p>
               </div>
             ) : (
-              <div className="w-full h-[220px]">
+              <div className="w-full h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -293,10 +262,11 @@ export function CensoDetailClient({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius={60}
-                      outerRadius={80}
+                      innerRadius={50}
+                      outerRadius={70}
                       paddingAngle={3}
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      labelLine={false}
                     >
                       {statusChartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -310,47 +280,47 @@ export function CensoDetailClient({
           </CardContent>
         </Card>
 
-        {/* Dynamic Field analysis chart */}
-        <Card className="flex flex-col">
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
+        {/* Dynamic Field chart */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-primary" />
-                  Análisis por Campo
+                  Análisis por campo
                 </CardTitle>
-                <CardDescription>
-                  Distribución de valores del campo seleccionado
-                </CardDescription>
+                <CardDescription className="text-xs">Distribución de valores</CardDescription>
               </div>
-              <Select value={selectedCampoId} onValueChange={setSelectedCampoId}>
-                <SelectTrigger className="w-full sm:w-[220px]">
-                  <SelectValue placeholder="Seleccione un campo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {campos.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {campos.length > 0 && (
+                <Select value={selectedCampoId} onValueChange={setSelectedCampoId}>
+                  <SelectTrigger className="w-full sm:w-[180px] h-8 text-xs">
+                    <SelectValue placeholder="Seleccione campo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {campos.map(c => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </CardHeader>
-          <CardContent className="flex-1 min-h-[250px] flex items-center justify-center">
+          <CardContent className="min-h-[200px] flex items-center justify-center">
             {loadingChart ? (
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/30" />
+              <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/30" />
             ) : dynamicChartData.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground flex flex-col items-center justify-center">
-                <Activity className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                <p className="text-xs">Sin datos suficientes para este campo</p>
+              <div className="text-center text-muted-foreground flex flex-col items-center gap-2">
+                <Activity className="h-7 w-7 text-muted-foreground/30" />
+                <p className="text-xs">Sin datos para este campo</p>
               </div>
             ) : (
-              <div className="w-full h-[220px]">
+              <div className="w-full h-[180px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dynamicChartData}>
-                    <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => val.length > 15 ? val.substring(0, 15) + '...' : val} />
-                    <YAxis allowDecimals={false} fontSize={10} tickLine={false} axisLine={false} />
+                  <BarChart data={dynamicChartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" fontSize={9} tickLine={false} axisLine={false} tickFormatter={v => v.length > 12 ? v.slice(0, 12) + "…" : v} />
+                    <YAxis allowDecimals={false} fontSize={9} tickLine={false} axisLine={false} />
                     <Tooltip formatter={(value) => [`${value} registros`, "Total"]} />
-                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                       {dynamicChartData.map((_, i) => (
                         <Cell key={`cell-${i}`} fill={COLORS[i % COLORS.length]} />
                       ))}
@@ -363,13 +333,57 @@ export function CensoDetailClient({
         </Card>
       </div>
 
+      {/* ── Capturistas Activity ── */}
+      {capturistasActivity.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              Actividad de capturistas
+            </CardTitle>
+            <CardDescription className="text-xs">Registros capturados por usuario</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border">
+              {capturistasActivity.map((c, i) => {
+                const maxCount = capturistasActivity[0].count
+                const pct = maxCount > 0 ? Math.round((c.count / maxCount) * 100) : 0
+                return (
+                  <div key={i} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <span className="text-xs text-muted-foreground font-mono w-5 text-right shrink-0">{i + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium truncate">{c.name}</span>
+                        <span className="text-xs font-semibold tabular-nums text-muted-foreground ml-3 shrink-0">{c.count.toLocaleString()}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary/60 transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Records Table ── */}
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4">
+        <CardHeader className="pb-3 flex flex-row items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-lg font-bold">Registros del Censo</CardTitle>
-            <CardDescription>Visualiza, busca y administra los registros capturados</CardDescription>
+            <CardTitle className="text-sm font-semibold">Registros del censo</CardTitle>
+            <CardDescription className="text-xs">Visualiza y administra los registros capturados</CardDescription>
           </div>
+          <Button asChild size="sm" className="shrink-0">
+            <Link href={`/dashboard/censos/${censo.id}/capturar`}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Capturar
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent className="pt-0">
           <RegistrosTable censoId={censo.id} campos={campos} />
