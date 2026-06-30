@@ -26,14 +26,13 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { 
-  LogOut, 
-  User, 
-  Settings, 
-  Bell, 
-  Building2, 
-  ChevronDown, 
-  Plus, 
+import {
+  LogOut,
+  User,
+  Settings,
+  Building2,
+  ChevronDown,
+  Plus,
   Check,
   Loader2
 } from "lucide-react"
@@ -192,16 +191,8 @@ export function DashboardHeader({ profile, organization }: DashboardHeaderProps)
             </div>
           )}
         </div>
-
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-            <span className="sr-only">Notificaciones</span>
-          </Button>
-
           <ThemeToggle />
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full">
